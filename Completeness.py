@@ -91,7 +91,8 @@ class Completeness:
             FACILITYZIP,
             FACILITYPHONE, 
             FACILITYNAME,
-            PERFORMINGFACILITYID
+            PERFORMINGFACILITYID, 
+            RESULT
         FROM 
             [Laboratory Information (system)]
         WHERE 
@@ -140,37 +141,25 @@ class Completeness:
         The dataframe contains percent completeness of each desired field. Finally we combine both 
         dataframes into one excel sheet, which results in our final completeness summary report
         '''
-        
-        # need to establish database connection
-        conn, _ = self.database_connection()
 
         # generating queries for both Laboratory data and Demographic data 
         lab_query = self.tstRangeQuery_lab()
         demo_query = self.tstRangeQuery_demographic()
 
         # Creating dataframes from query results 
-        lab_df = self.range_export_df(conn, lab_query)
-        demo_df = self.range_export_df(conn, demo_query)
+        lab_df = self.range_export_df(lab_query)
+        demo_df = self.range_export_df(demo_query)
 
-        # Going to make one excel sheet with completeness reports from both demographic 
-        # and lab information
-        lab_name = re.sub(r'[^\w\s]+', '_',self.lab_name)
-        writer = pd.ExcelWriter(f'{lab_name}_completeness_reports.xlsx', engine='xlsxwriter')
-        demo_df.to_excel(writer, sheet_name='Sheet1', startcol=0, index=False)
-        lab_df.to_excel(writer, sheet_name='Sheet1', startcol = len(demo_df.columns)+1, index=False)
-        
-        # close writer object
-        writer.close()
-        return 
+        return lab_df, demo_df
 
-    def range_export_df(self, conn, query):
+    def range_export_df(self, query):
         '''
         After constructing the query and making the connection to the database. We create 
         a dataframe that summarize the results of the bulk exports. The summary is done by looking
         at the total amount of NonNull values / total (NonNull + Null) for each specified field in 
         the query that is passed to this method 
         '''
-        df = pd.read_sql_query(query, conn)
+        df = self.query_df(query)
         
         # Getting counts of Null and not Null values
         null_counts = df.isna().sum()
@@ -190,3 +179,146 @@ class Completeness:
         )
         lab_df['Percent Complete'] = lab_df['Percent Complete'].map('{:,.2f}'.format)
         return lab_df
+
+    def query_df(self, query):
+        '''
+        Helper function to create a pandas dataframe from an sql query 
+        '''
+        # need to establish database connection
+        conn, _ = self.database_connection()
+        df = pd.read_sql_query(query, conn)
+        return df
+    
+    def report_builder(self):
+        # Steps to producing cross tab
+        # 1. look into the table the query produce
+        # 2. use pandas.crosstab() for the two columns of interest 
+    
+        # Read in a query for demographics table
+        demo_query = self.tstRangeQuery_demographic()
+        lab_query  = self.tstRangeQuery_lab()
+
+        # generating query dataframes to be used later on in creating the crosstab
+        demo_query_df = self.query_df(demo_query)
+        lab_query_df = self.query_df(lab_query)
+
+        # generating all dataframes that are necessary for 
+        lab_complete_report_df, demo_complete_report_df = self.completeness_report()
+        race_ethnicity_cross_df = self.cross_tab_df(demo_query_df, 'Ethnicity', 'Race')
+        resultedOrganism_abflag_df = self.cross_tab_df(lab_query_df, 'ABNORMALFLAG','ResultedOrganism')
+        result_abflag_df = self.cross_tab_df(lab_query_df, 'ABNORMALFLAG', 'RESULT')
+        result_freq_df = self.result_test()
+
+        # Check if any of the dataframes are empty
+        dfs = [
+            lab_complete_report_df, 
+            demo_complete_report_df, 
+            race_ethnicity_cross_df,
+            resultedOrganism_abflag_df, 
+            result_abflag_df, 
+            result_freq_df
+            ]
+        # check to make sure the dataframes are not empty
+        for i, df in enumerate(dfs):
+            assert not df.empty, f"Dataframe {i+1} is empty!"
+
+        # Going to make one excel sheet with completeness reports from both demographic 
+        # and lab information
+        lab_name = re.sub(r'[^\w\s]+', '_',self.lab_name)
+        writer = pd.ExcelWriter(f'{lab_name}_data_quality_reports.xlsx', engine='xlsxwriter')
+        demo_complete_report_df.to_excel(
+            writer, 
+            sheet_name='CompletenessReport', 
+            startcol=0, 
+            index=False
+            )
+        lab_complete_report_df.to_excel(
+            writer, 
+            sheet_name='CompletenessReport', 
+            startcol = len(demo_complete_report_df.columns)+1, 
+            index=False
+            )
+        race_ethnicity_cross_df.to_excel(
+            writer,
+            sheet_name='Race_Ethnicity'
+        )
+        resultedOrganism_abflag_df.to_excel(
+            writer,
+            sheet_name='ResultedOrganism_AbNormalFlag'
+        )
+        result_abflag_df.to_excel(
+            writer,
+            sheet_name='Result_AbFlag'
+        )
+        result_freq_df.to_excel(
+            writer,
+            sheet_name = 'Frequency_ResultTest'
+        )
+        # close writer object
+        writer.close()
+
+        
+        return 
+    
+    def cross_tab_df(self, df, index, column):
+        '''
+        The function loops through two columns and sees how frequently each column pairs are 
+        seen next to each other
+        i.e)
+            Race            Ethnicity
+        White            Hispanic or Latino
+        Asian            Not Hispanic or Latino
+        We are using a nested dictionary to store the count values for each unique pair b/w the 
+        2 columns. Afterwards, we transform the nested dictionary into a dataframe that looks similar
+        to a crosstab in pandas 
+        '''
+        
+        counts = {}
+        # creating count table of unique values from col 1 and 2 that are seen together
+
+        for _, row in df.iterrows():
+            col1_val = row[index]
+            col2_val = row[column]
+            
+            # looking at every value in the first column and making a dictionary for its 
+            # pairs with every other value in col 2 
+            if col1_val not in counts: # create dictionary for each value in col 1
+                counts[col1_val] = {} # dictionary will be used to store counts of col 1 val with a specific col 2 val
+            
+            if col2_val in counts[col1_val]: # if a col 2 val already exists in nested dictionary add another count to that pair 
+                counts[col1_val][col2_val] += 1
+            else:
+                counts[col1_val][col2_val] = 1 # if it doesn't exist create an instance of it and give it a count of 1
+
+        # Now going to look at the the dictionary values and look inside the nested dictionary 
+        # for counts and which ever counts is the most for that value pair I will use that as a match
+        new_df = pd.DataFrame(counts)
+
+        # adding totals column
+        # Add a new column that sums up the row values
+        new_df['Total'] = new_df.sum(axis=1)
+        new_df.loc['Total'] = new_df.sum(axis=0) # code for new row of totals
+
+        # adding name for crosstab data frame 
+        new_df.index.name = f'{index} vs {column}'
+        return new_df
+    
+    def result_test(self):
+
+        # Getting lab information data frame
+        lab_query = self.tstRangeQuery_lab()
+        lab_query_df = self.query_df(lab_query)
+
+        # Get frequency and cumalitive frequency
+        val_counts = lab_query_df['RESULTTEXT'].value_counts()
+        cummal_sum = val_counts.cumsum(skipna=False)
+        
+        # Creating summary dataframe 
+        result_freq_df = pd.DataFrame(
+            {
+            'Frequency': val_counts,
+            'Cummalitive Frequency': cummal_sum
+            }
+        )
+        
+        return result_freq_df
