@@ -7,33 +7,87 @@
 --trusted-host files.pythonhosted.org
 --trusted-host pypi.org
 
+async-generator==1.10
+    # via trio
+attrs==23.1.0
+    # via
+    #   outcome
+    #   trio
+certifi==2022.12.7
+    # via
+    #   requests
+    #   selenium
+cffi==1.15.1
+    # via trio
+charset-normalizer==3.1.0
+    # via requests
+colorama==0.4.6
+    # via tqdm
 et-xmlfile==1.1.0
     # via openpyxl
-joblib==1.2.0
-    # via scikit-learn
+exceptiongroup==1.1.1
+    # via
+    #   trio
+    #   trio-websocket
+h11==0.14.0
+    # via wsproto
+idna==3.4
+    # via
+    #   requests
+    #   trio
+lxml==4.9.2
+    # via python-docx
 numpy==1.24.2
     # via
     #   -r requirements.in
     #   pandas
-    #   scikit-learn
-    #   scipy
 openpyxl==3.1.2
     # via -r requirements.in
+outcome==1.2.0
+    # via trio
+packaging==23.1
+    # via webdriver-manager
 pandas==1.5.3
     # via -r requirements.in
+pycparser==2.21
+    # via cffi
 pyodbc==4.0.35
     # via -r requirements.in
+pysocks==1.7.1
+    # via urllib3
 python-dateutil==2.8.2
     # via pandas
+python-docx==0.8.11
+    # via -r requirements.in
+python-dotenv==1.0.0
+    # via webdriver-manager
 pytz==2022.7.1
     # via pandas
-scikit-learn==1.2.2
+requests==2.29.0
+    # via webdriver-manager
+selenium==4.9.0
     # via -r requirements.in
-scipy==1.10.1
-    # via scikit-learn
 six==1.16.0
     # via python-dateutil
-threadpoolctl==3.1.0
-    # via scikit-learn
+sniffio==1.3.0
+    # via trio
+sortedcontainers==2.4.0
+    # via trio
+tqdm==4.65.0
+    # via webdriver-manager
+trio==0.22.0
+    # via
+    #   selenium
+    #   trio-websocket
+trio-websocket==0.10.2
+    # via selenium
+urllib3[socks]==1.26.15
+    # via
+    #   requests
+    #   selenium
+webdriver-manager==3.8.6
+    # via -r requirements.in
+wsproto==1.2.0
+    # via trio-websocket
 xlsxwriter==3.0.9
     # via -r requirements.in

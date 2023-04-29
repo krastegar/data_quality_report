@@ -92,6 +92,7 @@ class Completeness:
             FACILITYPHONE, 
             FACILITYNAME,
             PERFORMINGFACILITYID, 
+            IncidentID,
             RESULT
         FROM 
             [Laboratory Information (system)]
@@ -122,7 +123,8 @@ class Completeness:
             Home_Telephone, 
             Reported_Race as Race,
             Ethnicity,
-            Sex
+            Sex,
+            Incident_ID
         FROM 
             [Disease Incident Export]
         WHERE 
@@ -160,7 +162,13 @@ class Completeness:
         the query that is passed to this method 
         '''
         df = self.query_df(query)
-        
+
+        # going to drop unwanted columns
+        unwanted_columns = ['Incident_ID', 'IncidentID']
+        for col in df.columns:
+            if col in unwanted_columns:
+                df.drop(col, axis=1)
+
         # Getting counts of Null and not Null values
         null_counts = df.isna().sum()
         nonNullCounts = df.count()
@@ -195,12 +203,7 @@ class Completeness:
         # 2. use pandas.crosstab() for the two columns of interest 
     
         # Read in a query for demographics table
-        demo_query = self.tstRangeQuery_demographic()
-        lab_query  = self.tstRangeQuery_lab()
-
-        # generating query dataframes to be used later on in creating the crosstab
-        demo_query_df = self.query_df(demo_query)
-        lab_query_df = self.query_df(lab_query)
+        demo_query_df, lab_query_df = self.demo_lab_df()
 
         # generating all dataframes that are necessary for 
         lab_complete_report_df, demo_complete_report_df = self.completeness_report()
@@ -220,7 +223,7 @@ class Completeness:
             ]
         # check to make sure the dataframes are not empty
         for i, df in enumerate(dfs):
-            assert not df.empty, f"Dataframe {i+1} is empty!"
+            assert not df.empty, f"Dataframe {i+1} is empty! Check query construction"
 
         # Going to make one excel sheet with completeness reports from both demographic 
         # and lab information
@@ -259,6 +262,19 @@ class Completeness:
 
         
         return 
+
+    def demo_lab_df(self):
+        '''
+        Method that produces both demographics dataframe and lab info dataframe, from 
+        the query strings produced from tstRangeQuery
+        '''
+        demo_query = self.tstRangeQuery_demographic()
+        lab_query  = self.tstRangeQuery_lab()
+
+        # generating query dataframes to be used later on in creating the crosstab
+        demo_query_df = self.query_df(demo_query)
+        lab_query_df = self.query_df(lab_query)
+        return demo_query_df,lab_query_df
     
     def cross_tab_df(self, df, index, column):
         '''
@@ -308,9 +324,11 @@ class Completeness:
         # Getting lab information data frame
         lab_query = self.tstRangeQuery_lab()
         lab_query_df = self.query_df(lab_query)
-
+        no_ref_range_df = lab_query_df[
+            lab_query_df['REFERENCERANGE'].isnull() | lab_query_df['REFERENCERANGE'].isna()
+            ]
         # Get frequency and cumalitive frequency
-        val_counts = lab_query_df['RESULTTEXT'].value_counts()
+        val_counts = no_ref_range_df['RESULTTEXT'].value_counts()
         cummal_sum = val_counts.cumsum(skipna=False)
         
         # Creating summary dataframe 
@@ -320,5 +338,23 @@ class Completeness:
             'Cummalitive Frequency': cummal_sum
             }
         )
-        
         return result_freq_df
+
+    def combined_query_df(self):
+        '''
+        Joining both Demographics Information and Lab Information into one dataframe. Dataframe
+        will be used to check fields in completeness report and Dates, which will be used to check 
+        '''
+        # grab both query df 
+        demo_df, lab_df = self.demo_lab_df()
+        lab_df.rename(columns={'IncidentID': 'Incident_ID'}, inplace=True)
+
+        # Join the Tables of Disease Incident ID 
+        combined_df = pd.merge(
+        demo_df,
+        lab_df,
+        on=['Incident_ID'],
+        how='inner'
+        )
+
+        return combined_df

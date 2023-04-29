@@ -2,5 +2,7 @@ pandas
 numpy
 pyodbc
 openpyxl
-scikit-learn
 xlsxwriter
+selenium
+webdriver_manager
+python-docx
