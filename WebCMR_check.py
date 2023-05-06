@@ -9,7 +9,6 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException,UnexpectedAlertPresentException
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.alert import Alert
 from Completeness import Completeness
 from typing import Union
 from docx import Document
@@ -56,14 +55,6 @@ class WebCMR_check(Completeness):
     
     def acc_test_search(self, acc_num, driver,resultTest=None):
 
-
-        # adding this piece of code to intereact with alerts 
-        try: 
-            alert = Alert(driver)
-            alert.accept()
-        except:
-            pass
-        
         # navigate to IMM menu
         _ = self.nav2IMM(driver) 
 
@@ -74,17 +65,9 @@ class WebCMR_check(Completeness):
         )
         acc_box.clear()
         acc_box.send_keys(str(acc_num))
-        '''
-        test_search = self.multiFind(
-            driver=driver,
-            element_id= 'txtResultedTest',
-            xpath='/html/body/form/div[3]/div/div/table[3]/tbody/tr[2]/td/table/tbody/tr[3]/td[2]/input'
-        )
-        test_search.clear()
-        test_search.send_keys(resultTest)
-        '''
-        search_id = 'ibtnSearch'
-        search_btn = self.multiFind(
+
+        search_id : str = 'ibtnSearch'
+        search_btn : webdriver = self.multiFind(
             driver=driver,
             element_id= search_id,
             xpath='/html/body/form/div[3]/div/div/table[3]/tbody/tr[2]/td/table/tbody/tr[4]/td/div/input[1]'
@@ -103,11 +86,19 @@ class WebCMR_check(Completeness):
         doc : Document = Document()
         doc.add_heading('HL7 Error Examples')
 
+        # calling combined query
+        combined_query_df : pd.DataFrame = self.combined_query_df()
+        demo_complete_df ,lab_complete_df = self.completeness_report()
+
         # Get the list of Accession numbers from both date_check and threshold_search
-        date_accession : list = self.date_check()
-        threshold_accession : list = self.threshold_search()
+        date_accession : list = self.date_check(combined_query_df)
+        threshold_accession : list = self.threshold_search(
+            master_table=combined_query_df,
+            demo_complete_df=demo_complete_df,
+            lab_complete_df=lab_complete_df
+        )
         accession_search : list = date_accession + threshold_accession
-        
+
         # get driver: 
         driver = self.login()
 
@@ -122,13 +113,16 @@ class WebCMR_check(Completeness):
                     self.hl7_extraction(
                         doc, 
                         accession_search, 
-                        index, result_test, 
+                        index, 
+                        result_test, 
                         acc_num, 
                         heading='THRESHOLD ERROR', 
                         driver=driver
                     )  
-                    time.sleep(2)
+                    #time.sleep(2)
                 if isinstance(distinguifier, list):
+                    # Need to tailor accession search variable to give a good header 
+                    accession_search : list = [accession_search[0], accession_search[1], accession_search[2][1]]
                     self.hl7_extraction(
                         doc, 
                         accession_search,
@@ -138,7 +132,7 @@ class WebCMR_check(Completeness):
                         heading='DATE ERROR', 
                         driver=driver
                     )
-                    time.sleep(2)
+                    #time.sleep(2)
             except UnexpectedAlertPresentException:
                 continue
         doc.save("HL7_Error.docx")
@@ -236,7 +230,7 @@ class WebCMR_check(Completeness):
         desired_option.click()
         return
     
-    def date_check(self):
+    def date_check(self, combined_query_df) -> list:
 
         '''
         Method to find all combinations of dates that violate logical lense.
@@ -246,7 +240,7 @@ class WebCMR_check(Completeness):
         '''
 
         # call combinded query df
-        combined_query_df = self.combined_query_df()
+        # combined_query_df = self.combined_query_df()
 
         # Array of accession for date errors
         date_errors = []
@@ -260,21 +254,32 @@ class WebCMR_check(Completeness):
             # running checks on valid time combinations 
             if spec_col_date > spec_rec_date:
                 date_errors.append(
-                    (row['RESULTTEXT'],row['ACCESSIONNUMBER'], [spec_col_date,spec_rec_date])
+                    (
+                        row['RESULTTEXT'],
+                        row['ACCESSIONNUMBER'],
+                        ['SpecCollectDate Error (w/Recieve Date)',f'SpecCollectDate Error (w/Recieve Date) : {spec_col_date} > {spec_rec_date}']
+                    )
                 )
-            elif spec_rec_date > result_date:
+            if spec_rec_date > result_date:
                 date_errors.append(
-                    (row['RESULTTEXT'],row['ACCESSIONNUMBER'],[spec_rec_date,result_date])
+                    (
+                        row['RESULTTEXT'],
+                        row['ACCESSIONNUMBER'],
+                        ['SpecRecieveDate Error (w/Result Date)',f'SpecRecieveDate Error (w/Result Date) : {spec_rec_date} > {result_date}']
+                    )
                 )
-            elif spec_col_date > result_date:
+            if spec_col_date > result_date:
                 date_errors.append(
-                    (row['RESULTTEXT'],row['ACCESSIONNUMBER'], [spec_col_date,result_date])
+                    (
+                        row['RESULTTEXT'],
+                        row['ACCESSIONNUMBER'], 
+                        ['SpecCollectDate Error (w/Result Date)',f'SpecCollectDate Error (w/Result Date) : {spec_col_date} > {result_date}']
+                    )
                 )
-            else: pass 
-        
+            
         return date_errors
     
-    def threshold_search(self) -> list:
+    def threshold_search(self, master_table, demo_complete_df ,lab_complete_df) -> list:
 
         '''
         This method is meant to look at the completeness report of both lab and demographics data, and
@@ -283,27 +288,24 @@ class WebCMR_check(Completeness):
         of Accession Number and Result Test where that field has a blank entry 
         '''
 
-        # calling in the the combined sql query dataframes and calling it master table
-        master_table = self.combined_query_df()
+        # making sure index's are not an issue in later analysis
         master_table.reset_index(inplace=True)
-
-        # going to look at the completeness reports and set a threshold
-        demo_complete_df ,lab_complete_df = self.completeness_report()
-
+        
+        
         # Going to concatenate into one df
         combined_complete_df : pd.DataFrame 
         combined_complete_df = pd.concat([demo_complete_df, lab_complete_df])
         combined_complete_df.reset_index(inplace=True)
         combined_complete_df['Percent Complete'] : pd.Series
         combined_complete_df['Percent Complete'] = combined_complete_df['Percent Complete'].astype(float)
-
+        print(combined_complete_df)
         # building a dictionary that has the threshold value for every specific field of interest
         # At the same time checking if the threshold value is less than the percent complete
         # and then trying to find the accession numbers for one of the blank fields in the that category
         threshold_key_pair : dict = {}
         threshold_vals : list = [
             100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,
-            100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,
+            100,100,100,100,100,100,100,100,100,100,100,100,100,95,95,95,95,95,
             100,100,100,100
             ] # need marjorie to give me a list of thresholds similar to this 
         

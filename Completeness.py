@@ -53,9 +53,8 @@ class Completeness:
         pyodbc.lowercase = False
         conn = pyodbc.connect(
             r"Driver={Microsoft Access Driver (*.mdb, *.accdb)};" +
-            fr"Dbq={self.folder_path}\{self.file_name}.accdb")
+            fr"Dbq={self.folder_path}\{self.file_name}")
         cursor = conn.cursor()
-
         return conn, cursor
     
     def tstRangeQuery_lab(self):
@@ -186,6 +185,7 @@ class Completeness:
             }
         )
         lab_df['Percent Complete'] = lab_df['Percent Complete'].map('{:,.2f}'.format)
+        lab_df['Percent Complete'] = lab_df['Percent Complete'].astype(float)
         return lab_df
 
     def query_df(self, query):
@@ -255,7 +255,7 @@ class Completeness:
         )
         result_freq_df.to_excel(
             writer,
-            sheet_name = 'Frequency_ResultTest'
+            sheet_name = 'Blank_ReferenceRange'
         )
         # close writer object
         writer.close()
@@ -276,7 +276,7 @@ class Completeness:
         lab_query_df = self.query_df(lab_query)
         return demo_query_df,lab_query_df
     
-    def cross_tab_df(self, df, index, column):
+    def cross_tab_df(self, df : pd.DataFrame, index : str, column : str) -> pd.DataFrame:
         '''
         The function loops through two columns and sees how frequently each column pairs are 
         seen next to each other
@@ -296,6 +296,13 @@ class Completeness:
             col1_val = row[index]
             col2_val = row[column]
             
+            # changing all NaN values into Null values 
+            if col1_val in (np.nan, None): 
+                col1_val = 'N/A'
+            
+            if col2_val in (np.nan, None): 
+                col2_val = 'N/A'
+
             # looking at every value in the first column and making a dictionary for its 
             # pairs with every other value in col 2 
             if col1_val not in counts: # create dictionary for each value in col 1
@@ -309,7 +316,8 @@ class Completeness:
         # Now going to look at the the dictionary values and look inside the nested dictionary 
         # for counts and which ever counts is the most for that value pair I will use that as a match
         new_df = pd.DataFrame(counts)
-
+        new_df.index = new_df.index.fillna(None)
+        new_df.columns = new_df.columns.fillna(None)
         # adding totals column
         # Add a new column that sums up the row values
         new_df['Total'] = new_df.sum(axis=1)
