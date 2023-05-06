@@ -1,0 +1,8 @@
+pandas
+numpy
+pyodbc
+openpyxl
+xlsxwriter
+selenium
+webdriver_manager
+python-docx
