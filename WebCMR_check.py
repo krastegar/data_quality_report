@@ -1,6 +1,5 @@
 import pandas as pd
-import numpy as np
-import time
+import logging
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -36,6 +35,7 @@ class WebCMR_check(Completeness):
         WebCMR (Production)
         '''
         # create chrome webdriver object with the above options
+        logging.info('Starting connection to webdriver')
         service : ChromeService = ChromeService(executable_path="chromedriver.exe")
         driver : webdriver = webdriver.Chrome(service=service)
 
@@ -44,6 +44,7 @@ class WebCMR_check(Completeness):
 
         # Find the username and password elements and enter login credentials
         # time.sleep(1)
+        logging.info('Logging into TST')
         username = driver.find_element(By.ID, value="txtUsername")
         username.send_keys(self.username)
         password = driver.find_element(By.ID, value="txtPassword")
@@ -56,8 +57,10 @@ class WebCMR_check(Completeness):
     def acc_test_search(self, acc_num, driver,resultTest=None):
 
         # navigate to IMM menu
+        logging.info('Going to Incoming Message Monitor...')
         _ = self.nav2IMM(driver) 
 
+        logging.info('Inputting accession numbers into search bar')
         acc_box = self.multiFind(
             driver=driver,
             element_id= 'txtAccession',
@@ -87,11 +90,14 @@ class WebCMR_check(Completeness):
         doc.add_heading('HL7 Error Examples')
 
         # calling combined query
+        logging.info('Getting information from both Demographics and Lab and combining them into one DF')
         combined_query_df : pd.DataFrame = self.combined_query_df()
         demo_complete_df ,lab_complete_df = self.completeness_report()
 
         # Get the list of Accession numbers from both date_check and threshold_search
+        logging.info('Finding exceptions with incorrect date combinations')
         date_accession : list = self.date_check(combined_query_df)
+        logging.info('Finding exceptions with less completeness than allowed threshold')
         threshold_accession : list = self.threshold_search(
             master_table=combined_query_df,
             demo_complete_df=demo_complete_df,
@@ -101,7 +107,7 @@ class WebCMR_check(Completeness):
 
         # get driver: 
         driver = self.login()
-
+        logging.info('Scraping TST environment for HL7 messages that were flagged as missing or incorrect info...')
         for index, search_params in enumerate(accession_search):
             try:
             
@@ -110,6 +116,11 @@ class WebCMR_check(Completeness):
                 distinguifier : Union[str, list] = search_params[2] # union is a method to type hint two types
 
                 if isinstance(distinguifier, str):
+                    logging.info(f'''
+                    Putting threshold error HL7 examples in word doc
+                    ACCESSION # : {acc_num}
+                    '''
+                                 )
                     self.hl7_extraction(
                         doc, 
                         accession_search, 
@@ -122,6 +133,11 @@ class WebCMR_check(Completeness):
                     #time.sleep(2)
                 if isinstance(distinguifier, list):
                     # Need to tailor accession search variable to give a good header 
+                    logging.info(f'''
+                    Putting date combination error HL7 examples in word doc
+                    ACCESSION # : {acc_num}
+                    '''
+                                 )
                     accession_search : list = [accession_search[0], accession_search[1], accession_search[2][1]]
                     self.hl7_extraction(
                         doc, 
@@ -135,6 +151,7 @@ class WebCMR_check(Completeness):
                     #time.sleep(2)
             except UnexpectedAlertPresentException:
                 continue
+        logging.info('Putting all HL7 examples into docx ... ')
         doc.save("HL7_Error.docx")
         return
 
@@ -342,3 +359,4 @@ class WebCMR_check(Completeness):
         assert len(threshold_error) < 41
         
         return threshold_error
+    

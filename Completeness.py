@@ -21,6 +21,7 @@
 
 import pandas as pd
 import numpy as np
+import logging 
 import pyodbc
 import re 
 
@@ -206,10 +207,15 @@ class Completeness:
         demo_query_df, lab_query_df = self.demo_lab_df()
 
         # generating all dataframes that are necessary for 
+        logging.info('Calculating Completeness for each field in query DF')
         lab_complete_report_df, demo_complete_report_df = self.completeness_report()
+        logging.info('Looking at the cross tab of Ethnicity vs Race')
         race_ethnicity_cross_df = self.cross_tab_df(demo_query_df, 'Ethnicity', 'Race')
+        logging.info('Cross tab of Abnormal Flag vs ResultedOrganism')
         resultedOrganism_abflag_df = self.cross_tab_df(lab_query_df, 'ABNORMALFLAG','ResultedOrganism')
+        logging.info('Cross tab of Abnormal Flag vs Result')
         result_abflag_df = self.cross_tab_df(lab_query_df, 'ABNORMALFLAG', 'RESULT')
+        logging.info('Calculating how many ResultTest have blank reference range calculations')
         result_freq_df = self.result_test()
 
         # Check if any of the dataframes are empty
@@ -222,11 +228,15 @@ class Completeness:
             result_freq_df
             ]
         # check to make sure the dataframes are not empty
-        for i, df in enumerate(dfs):
-            assert not df.empty, f"Dataframe {i+1} is empty! Check query construction"
+        try:
+            for i, df in enumerate(dfs):
+                assert not df.empty, f"Dataframe {i+1} is empty! Check query construction"
+        except AssertionError:
+            logging.exception('Dataframe is empty! Check query construction')
 
         # Going to make one excel sheet with completeness reports from both demographic 
         # and lab information
+        logging.info('Report Card is being built...')
         lab_name = re.sub(r'[^\w\s]+', '_',self.lab_name)
         writer = pd.ExcelWriter(f'{lab_name}_data_quality_reports.xlsx', engine='xlsxwriter')
         demo_complete_report_df.to_excel(
@@ -268,10 +278,14 @@ class Completeness:
         Method that produces both demographics dataframe and lab info dataframe, from 
         the query strings produced from tstRangeQuery
         '''
+        logging.info('Pulling queries from demographic tab')
         demo_query = self.tstRangeQuery_demographic()
+
+        logging.info('Getting query results for laboratory information')
         lab_query  = self.tstRangeQuery_lab()
 
         # generating query dataframes to be used later on in creating the crosstab
+        logging.info('Tranforming Query results into Pandas Dataframe')
         demo_query_df = self.query_df(demo_query)
         lab_query_df = self.query_df(lab_query)
         return demo_query_df,lab_query_df
