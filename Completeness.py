@@ -47,10 +47,13 @@ class Completeness:
         self.test5 = test_center_5
 
     def database_connection(self):
-        '''
-        Creating database connection to run sql queries and extract necessary
-        information from Microsoft Access files
-        '''
+        """
+        Establishes a connection to the database using the provided folder path and file name.
+
+        :return: A tuple containing the connection object and the cursor object.
+        :rtype: tuple
+        """
+
         pyodbc.lowercase = False
         conn = pyodbc.connect(
             r"Driver={Microsoft Access Driver (*.mdb, *.accdb)};" +
@@ -59,11 +62,14 @@ class Completeness:
         return conn, cursor
     
     def tstRangeQuery_lab(self):
-        '''
-        Query string that is meant to extract relative information for looking at TST WebCMR data
-        in bulk. In this example I am only using two test centers. If we are looking at 3 or more then
-        I can make the requirements for the function a list or something.
-        '''
+        """
+        Generates a SQL query to retrieve specific fields from the 'Laboratory Information (system)'
+        table based on the provided HL7 filenames.
+
+        Returns:
+            str: The SQL query string.
+        """
+
         query = f'''
         SELECT 
             ACCESSIONNUMBER,
@@ -97,19 +103,27 @@ class Completeness:
         FROM 
             [Laboratory Information (system)]
         WHERE 
-            FACILITYNAME LIKE '%{self.test1}%' 
-            OR FACILITYNAME LIKE '%{self.test2}%'
-            OR FACILITYNAME LIKE '%{self.test3}%'
-            OR FACILITYNAME LIKE '%{self.test4}%'
-            OR FACILITYNAME LIKE '%{self.test5}%'
+            HL7FILENAME LIKE '%{self.test1}%' 
+            OR HL7FILENAME LIKE '%{self.test2}%'
+            OR HL7FILENAME LIKE '%{self.test3}%'
+            OR HL7FILENAME LIKE '%{self.test4}%'
+            OR HL7FILENAME LIKE '%{self.test5}%'
         '''
         return query
     
     def tstRangeQuery_demographic(self):
-        '''
-        Similar objective to tstRangeQuery_lab, but the select statement is meant
-        to get different information from the disease incident table from the .accdb file
-        '''
+        """
+        The function executes a SQL query to select the above fields from the 'Disease Incident Export' 
+        table.The query filters the results based on the laboratory information provided through the 
+        parameters.The laboratory information is used to perform partial string matching on the 
+        'Laboratory' column.If any of the laboratory keywords (self.test1, self.test2, self.test3, 
+        self.test4, self.test5) are found in the 'Laboratory' column, the corresponding 
+        disease incident record is included in the result set.
+        
+        Returns:
+            query (str): The SQL query string for the range query on demographic information.
+        """
+
         
         query = f'''
         SELECT 
@@ -137,12 +151,16 @@ class Completeness:
         return query
 
     def completeness_report(self):
-        '''
+        """
         After generating queries used to grab information from the .accdb files that are related to 
         WebCMR Lab and Demographics tab, we create a dataframe from them using range_export() method.
         The dataframe contains percent completeness of each desired field. Finally we combine both 
         dataframes into one excel sheet, which results in our final completeness summary report
-        '''
+        
+        :return: A tuple containing two dataframes: lab_df and demo_df.
+        :rtype: tuple
+        """
+
 
         # generating queries for both Laboratory data and Demographic data 
         lab_query = self.tstRangeQuery_lab()
@@ -155,12 +173,21 @@ class Completeness:
         return lab_df, demo_df
 
     def range_export_df(self, query):
-        '''
-        After constructing the query and making the connection to the database. We create 
-        a dataframe that summarize the results of the bulk exports. The summary is done by looking
-        at the total amount of NonNull values / total (NonNull + Null) for each specified field in 
-        the query that is passed to this method 
-        '''
+        """
+        Generates a DataFrame containing the percentage of complete information for each field of 
+        interest. The Percent Completeness is done by looking at the total amount of 
+        NonNull values / total (NonNull + Null) for each specified field in the query that is passed 
+        to this method
+
+        Args:
+            query (str): The SQL query to retrieve the data from the database.
+            
+        Returns:
+            pandas.DataFrame: A DataFrame with two columns: 'Fields of Interest' and 'Percent Complete'.
+                The 'Fields of Interest' column contains the names of the fields in the dataset.
+                The 'Percent Complete' column contains the percentage of complete information for each field.
+        """
+
         df = self.query_df(query)
 
         # going to drop unwanted columns
@@ -185,23 +212,51 @@ class Completeness:
             'Percent Complete' : percent_complete
             }
         )
+        # formatting percent column
         lab_df['Percent Complete'] = lab_df['Percent Complete'].map('{:,.2f}'.format)
         lab_df['Percent Complete'] = lab_df['Percent Complete'].astype(float)
+
         return lab_df
 
     def query_df(self, query):
-        '''
-        Helper function to create a pandas dataframe from an sql query 
-        '''
+        """
+        Executes a SQL query on a database and returns the result as a pandas DataFrame.
+        
+        Args:
+            query (str): The SQL query to be executed.
+            
+        Returns:
+            pandas.DataFrame: The result of the query as a DataFrame.
+        """
+
         # need to establish database connection
         conn, _ = self.database_connection()
         df = pd.read_sql_query(query, conn)
         return df
     
     def report_builder(self):
-        # Steps to producing cross tab
-        # 1. look into the table the query produce
-        # 2. use pandas.crosstab() for the two columns of interest 
+        """
+        Generates a report that includes completeness and cross-tabulation analyses for the 
+        given query data.
+
+        This function performs the following steps:
+        1. Reads in a query for the demographics table and the lab table.
+        2. Calculates the completeness for each field in the query data.
+        3. Generates cross-tabulation dataframes for specific columns of interest.
+        4. Checks if any of the generated dataframes are empty.
+        5. Builds an Excel workbook with multiple sheets, including:
+           - A sheet for the completeness report, containing both demographic and lab information.
+           - A sheet for the cross-tabulation of ethnicity vs race.
+           - A sheet for the cross-tabulation of abnormal flag vs resulted organism.
+           - A sheet for the cross-tabulation of abnormal flag vs result.
+           - A sheet for the frequency of blank reference range calculations in result tests.
+
+        Parameters:
+        - self: The current instance of the class.
+
+        Returns:
+        - None
+        """
     
         # Read in a query for demographics table
         demo_query_df, lab_query_df = self.demo_lab_df()
@@ -274,10 +329,17 @@ class Completeness:
         return 
 
     def demo_lab_df(self):
-        '''
-        Method that produces both demographics dataframe and lab info dataframe, from 
-        the query strings produced from tstRangeQuery
-        '''
+        """
+        Pulls queries from the demographic tab and the laboratory information tab.
+        Transforms the query results into Pandas DataFrames.
+        
+        Returns:
+            demo_query_df (DataFrame): The DataFrame containing the query results from the 
+                                        demographic tab.
+            lab_query_df (DataFrame): The DataFrame containing the query results from the 
+                                        laboratory information tab.
+        """
+
         logging.info('Pulling queries from demographic tab')
         demo_query = self.tstRangeQuery_demographic()
 
@@ -292,15 +354,49 @@ class Completeness:
     
     def cross_tab_df(self, df : pd.DataFrame, index : str, column : str) -> pd.DataFrame:
         '''
-        The function loops through two columns and sees how frequently each column pairs are 
-        seen next to each other
-        i.e)
-            Race            Ethnicity
-        White            Hispanic or Latino
-        Asian            Not Hispanic or Latino
+
         We are using a nested dictionary to store the count values for each unique pair b/w the 
         2 columns. Afterwards, we transform the nested dictionary into a dataframe that looks similar
         to a crosstab in pandas 
+
+        Generates a cross-tabulation DataFrame based on the specified index and column values.
+
+        This function takes in a pandas DataFrame and two column names: 'index' and 'column'. 
+        It creates a cross-tabulation DataFrame that shows the count of unique values from the 
+        'index' column and the 'column' column that are seen together.
+            i.e)
+                Race            Ethnicity
+            White            Hispanic or Latino
+            Asian            Not Hispanic or Latino
+        Parameters:
+            df (pd.DataFrame): The input DataFrame.
+            index (str): The name of the column to be used as the index.
+            column (str): The name of the column to be used as the column.
+
+        Returns:
+            pd.DataFrame: The cross-tabulation DataFrame.
+
+        Algorithm Steps:
+        1. Initialize an empty dictionary called 'counts' to store the counts of unique value pairs.
+        2. Iterate over each row in the input DataFrame.
+        3. Extract the values from the 'index' and 'column' columns for the current row.
+        4. If any of the values is NaN or None, replace it with the string 'N/A'.
+        5. Check if the value from the 'index' column already exists as a key in the 'counts' dictionary.
+        - If it does not exist, create a new nested dictionary for that value.
+        - The nested dictionary will be used to store counts of the 'index' value with each unique value from the 'column' column.
+        6. Check if the value from the 'column' column already exists as a key in the nested dictionary.
+        - If it exists, increment the count for that value pair by 1.
+        - If it does not exist, create a new key-value pair with the count initialized to 1.
+        7. After iterating over all rows, create a new DataFrame 'new_df' using the 'counts' dictionary.
+        8. Replace any NaN values in the index and column names of 'new_df' with None.
+        9. Add a new column called 'Total' to 'new_df' that sums up the row values.
+        10. Add a new row to 'new_df' that contains the column-wise totals.
+        11. Set the index name of 'new_df' to '{index} vs {column}'.
+
+        Example usage:
+        df = pd.DataFrame(...)
+        result = cross_tab_df(df, 'index_column', 'column_column')
+        print(result)
         '''
         
         counts = {}
@@ -342,7 +438,14 @@ class Completeness:
         return new_df
     
     def result_test(self):
-
+        """
+        Generates a summary dataframe of the frequency and cumulative frequency of each lab result
+        that had a blank 'RESULTTEXT' section, along with the name of the resulted test.
+        
+        Returns:
+            result_freq_df (pandas.DataFrame): A dataframe with two columns: 
+            'Frequency' and 'Cumulative Frequency'.
+        """
         # Getting lab information data frame
         lab_query = self.tstRangeQuery_lab()
         lab_query_df = self.query_df(lab_query)
@@ -363,10 +466,14 @@ class Completeness:
         return result_freq_df
 
     def combined_query_df(self):
-        '''
-        Joining both Demographics Information and Lab Information into one dataframe. Dataframe
-        will be used to check fields in completeness report and Dates, which will be used to check 
-        '''
+        """
+    	Combines the query dataframes and returns a new dataframe.
+
+    	Returns:
+    	    combined_df (pandas.DataFrame): The combined dataframe containing the joined 
+                                            data from the demo and lab dataframes.
+        """
+
         # grab both query df 
         demo_df, lab_df = self.demo_lab_df()
         lab_df.rename(columns={'IncidentID': 'Incident_ID'}, inplace=True)
