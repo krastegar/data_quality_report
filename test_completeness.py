@@ -13,7 +13,7 @@ class TestCompletenessClass(unittest.TestCase):
             lab_name='NameForFile',
             folder_path= '..\MicrosoftAcessDB',
             test_center_1='Palomar',
-            test_center_2='Pomerado',
+            test_center_2='Pomerado'
         )
         self.lab_query = self.test_instance.tstRangeQuery_lab()
         self.demographic_query = self.test_instance.tstRangeQuery_demographic()

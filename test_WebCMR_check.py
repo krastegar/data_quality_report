@@ -142,10 +142,6 @@ class TestWebCMRClass(unittest.TestCase):
         self.assertIn( ('result5', 'accession5', 'demo_field2'), threshold_error) 
         self.assertIn(('result1', 'accession1', 'lab_field1'), threshold_error) 
         self.assertIn(('result4', 'accession4', 'lab_field2'), threshold_error)
-    
-
-
-
 
 
 if __name__ == '__main__':
